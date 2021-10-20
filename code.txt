@@ -1,0 +1,40 @@
+$client = new Client();
+$twitterHtml = '';
+
+foreach ($twitterLinks as $index => $link) {
+    $link = explode('/', $link);
+
+    //Ensure status id is in link
+    $id = explode('?', $link[count($link) - 1]);
+    $id = $id[0];
+
+    if (empty($id) || !is_numeric($id)) {
+        continue;
+    }
+
+    $link = implode('/', array_slice($link, 0, 6));
+    try {
+        $cacheKey = self::CACHE_PREFIX."_discover_{$link}";
+        
+        if(Cache::has($cacheKey)) {
+            $rawData = Cache::get($cacheKey);
+        } else {
+            //https://developer.twitter.com/en/docs/twitter-for-websites/oembed-api
+            $response = $client->request('GET', rtrim(env('TWITTER_OEMBED', ''), ''), ['query' => [
+                'url' => $link
+            ]]);
+            
+            $rawData = json_decode($response->getBody())->html;
+
+            Cache::put($cacheKey, $rawData, 3600);
+        }
+    } catch (\Throwable $th) {
+        //If it fails to get tweet. For example, if from a suspended account or if tweet deleted
+        //Example tweet: https://twitter.com/Mochaghib11/status/1413318137446027268?s=19
+        $rawData = null;
+    }
+    if (!is_null($rawData)) {
+        $twitterHtml = $rawData;
+        break;
+    }
+}
